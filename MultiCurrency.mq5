@@ -4,22 +4,36 @@
   
    //#include <StdLibErr.mqh>
    #include <Trade/Trade.mqh >
+
    CTrade trade;
+   
+   enum yesorno 
+   {
+      No=0,     
+      Yes=1,     
+   };
    
    //INPUTS
    input string          TradeSymbols         = "AUDCAD|AUDJPY|AUDNZD|AUDUSD|EURUSD";                                         //Symbol(s) or ALL or CURRENT
    input string          TimeTrade            = "0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23";    //Trade Times ALL or Seperate Time With |
+   input yesorno         ActiveMonyManagment  = Yes;                                    //Active Money Managment With Risk
+   input double          RiskPercent          = 10;                                     //Risk Percent
    input int             Periods              = 10;
    input double          Multiplier           = 3.0;
-   input ENUM_TIMEFRAMES timeFrameTrigger;
+   input ENUM_TIMEFRAMES timeFrameTrigger = PERIOD_M20;
    input ENUM_TIMEFRAMES timeFrameTrend;
    input bool            BBW                  =true;                                    //Active BBW 
-   input int             highBBW              = 123;
-   input int             lowBBW               = 76;
+   input int             highBBW              = 179;
+   input int             lowBBW               = 84;
    input bool            CCI                  =true;                                    //Active CCI
-   input int             CCIPeriod            =240;
-   input double          MaxCciBuy            = -100;                                   //Max CCI Robot Buy : EX if -100 upper -100 dont trade
-   input double          MinCciSell           = 100;                                    //Min CCI Robot Sell : EX if 100 under 100 dont trade
+   input int             CCIPeriod            =105;
+   input double          MaxCciBuy            = -35;                                   //Max CCI Robot Buy : EX if -100 upper -100 dont trade
+   input double          MinCciSell           = 40;                                    //Min CCI Robot Sell : EX if 100 under 100 dont trade
+   
+   
+   
+  
+
    
    
    //GENERAL GLOBALS   
@@ -250,13 +264,26 @@
       
       if(TwoPreClose>TwoPreSt && onePreClose<onePreSt){
          string resultOC = OtherCondition(CurrentSymbol,SymbolLoop);
-         if(resultOC == "OCSell" || resultOC == "Trade")trade.Sell(0.01,CurrentSymbol,SYMBOL_ASK,newSL);
+         double lot = 0.01;
+         if(ActiveMonyManagment == Yes)
+           {
+            lot = SendLotSize(CurrentSymbol);
+           }
+           
+         if(resultOC == "OCSell" || resultOC == "Trade")trade.Sell(lot,CurrentSymbol,SYMBOL_ASK,newSL);
          //Print("TwoPreSt = ",TwoPreSt," TwoPreClose = ",TwoPreClose," onePreSt = ",onePreSt," onePreClose = ",onePreClose);
          return("SHORT");   
       }else if(TwoPreClose<TwoPreSt && onePreClose>onePreSt)
          {
             string resultOC = OtherCondition(CurrentSymbol,SymbolLoop);
-            if(resultOC == "OCBuy"|| resultOC == "Trade")trade.Buy(0.01,CurrentSymbol,SYMBOL_ASK,newSL);
+            double lot = 0.01;
+            if(ActiveMonyManagment == Yes)
+              {
+               lot = SendLotSize(CurrentSymbol);
+              }
+           
+            if(resultOC == "OCBuy"|| resultOC == "Trade")trade.Buy(lot,CurrentSymbol,SYMBOL_ASK,newSL);
+            
             //Print("TwoPreSt = ",TwoPreSt," TwoPreClose = ",TwoPreClose," onePreSt = ",onePreSt," onePreClose = ",onePreClose);
             return("LONG");
        }else return("NO_TRADE");
@@ -558,4 +585,175 @@
       
       Print(rsOC);
       return rsOC;
+  }
+  
+  
+  double SendLotSize(string symbolGlobal){
+   
+      double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+      //double equity = 1050;
+      Print("equity = ",equity);
+      double avaliableMargin = equity*(RiskPercent/100);
+      double calLotSize;
+   
+      double zPZOM = ZeroPointZeroOneMargin(symbolGlobal);
+      double zarib= avaliableMargin/zPZOM;
+      
+      double preRoundVolume = zarib * 0.01;
+      Print("preRoundVolume =",preRoundVolume);
+      calLotSize = RoundVolume(preRoundVolume,symbolGlobal);
+      Print("calLotSize = ",calLotSize);
+      return calLotSize;
+   
+   }
+   
+   double ZeroPointZeroOneMargin(string symbolGlobal){
+   
+         //zPZOM = zero Point Zero One Margin
+         double zPZOM = 0.01;
+         double vol =0.01;
+         double contractSize = SymbolInfoDouble(symbolGlobal,SYMBOL_TRADE_CONTRACT_SIZE);
+         double price = SymbolInfoDouble(symbolGlobal, SYMBOL_ASK);
+         long leverage= AccountInfoInteger(ACCOUNT_LEVERAGE);
+         double initial_margin_rate=0;
+         double maintenance_margin_rate =0;
+         bool  ch = SymbolInfoMarginRate(_Symbol,ORDER_TYPE_BUY,initial_margin_rate,maintenance_margin_rate);
+         int calc_mode=(int)SymbolInfoInteger(symbolGlobal,SYMBOL_TRADE_CALC_MODE);
+         string str_calc_mode;
+         switch(calc_mode)
+           {
+            case SYMBOL_CALC_MODE_FOREX:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_FOREX (Forex)";
+                  //Margin:  Lots * Contract_Size / Leverage * Margin_Rate
+                  //Profit:   (close_price - open_price) * Contract_Size*Lots
+                  zPZOM = (vol*contractSize)/(leverage*initial_margin_rate);
+                  break;
+               }
+            case SYMBOL_CALC_MODE_FOREX_NO_LEVERAGE:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_NO_LEVERAGE (Forex No Leverage)";
+                  //Margin:  Lots * Contract_Size * Margin_Rate
+                  //Profit:   (close_price - open_price) * Contract_Size * Lots
+                  break;
+               }
+            
+            case SYMBOL_CALC_MODE_FUTURES:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_FUTURES (Futures)";
+                  //Margin: Lots * InitialMargin * Margin_Rate
+                  //Profit:  (close_price - open_price) * TickPrice / TickSize*Lots
+                  break;
+               }
+            case SYMBOL_CALC_MODE_CFD:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_CFD (CFD)";
+                  //Margin: Lots * ContractSize * MarketPrice * Margin_Rate
+                  //Profit:  (close_price - open_price) * Contract_Size * Lots
+                  zPZOM =vol*contractSize*price*initial_margin_rate;
+                  break;
+               }
+            case SYMBOL_CALC_MODE_CFDINDEX:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_CFDINDEX (CFD Index)";
+                  //Margin: (Lots * ContractSize * MarketPrice) * TickPrice / TickSize * Margin_Rate
+                  //Profit:  (close_price - open_price) * Contract_Size * Lots
+                  
+                  break;
+               }
+            
+            case SYMBOL_CALC_MODE_CFDLEVERAGE:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_CFDLEVERAGE (CFD Leverage)";
+                  //Margin: (Lots * ContractSize * MarketPrice) / Leverage * Margin_Rate
+                  //Profit:  (close_price-open_price) * Contract_Size * Lots
+                  zPZOM = (vol*contractSize*price)/(leverage*initial_margin_rate);
+                  break;
+               }
+            case SYMBOL_CALC_MODE_EXCH_STOCKS:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_EXCH_STOCKS (Stocks)";
+                  //Margin: Lots * ContractSize * LastPrice * Margin_Rate
+                  //Profit:  (close_price - open_price) * Contract_Size * Lots
+                  break;
+               }
+            
+            case SYMBOL_CALC_MODE_EXCH_FUTURES:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_EXCH_FUTURES (Exchange Futures)";
+                  //Margin: Lots * InitialMargin * Margin_Rate or Lots * MaintenanceMargin * Margin_Rate
+                  //Profit:  (close_price - open_price) * Lots * TickPrice / TickSize
+                  break;
+               }
+            
+            case SYMBOL_CALC_MODE_EXCH_FUTURES_FORTS:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_EXCH_FUTURES_FORTS (FORTS Futures)";
+                  //Margin: Lots * InitialMargin * Margin_Rate or Lots * MaintenanceMargin * Margin_Rate * Margin_Rate
+                  //Profit:  (close_price - open_price) * Lots * TickPrice / TickSize
+                  break;
+               }
+               
+            case SYMBOL_CALC_MODE_EXCH_BONDS:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_EXCH_BONDS (Bonds)";
+                  //Margin: Lots * ContractSize * FaceValue * open_price * /100
+                  //Profit:  Lots * close_price * FaceValue * Contract_Size  + AccruedInterest * Lots * ContractSize
+                  break;
+               }
+            case SYMBOL_CALC_MODE_EXCH_STOCKS_MOEX:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_EXCH_STOCKS_MOEX (MOEX Stocks)";
+                  //Margin: Lots * ContractSize * LastPrice * Margin_Rate
+                  //Profit:  (close_price - open_price) * Contract_Size * Lots
+                  break;
+               }
+            case SYMBOL_CALC_MODE_EXCH_BONDS_MOEX:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_EXCH_BONDS_MOEX (MOEX Bonds)";
+                  //Margin: Lots * ContractSize * FaceValue * open_price * /100
+                  //Profit:  Lots * close_price * FaceValue * Contract_Size  + AccruedInterest * Lots * ContractSize
+                  break;
+               }
+            case SYMBOL_CALC_MODE_SERV_COLLATERAL:
+               {
+                  str_calc_mode="SYMBOL_CALC_MODE_SERV_COLLATERAL (Collateral)";
+                  //Margin: no
+                  //Profit:  no
+                  //Market Value: Lots*ContractSize*MarketPrice*LiqudityRate
+                  break;
+               }
+            
+           }
+           //Print("calc_mode = ",calc_mode," str_calc_mode = ",str_calc_mode);
+                  
+     return (zPZOM);       
+   }
+   
+   
+   double RoundVolume(double dblGeoNext, string pSymbol)
+  {
+   
+
+   double dblLotsMinimum  = SymbolInfoDouble(pSymbol, SYMBOL_VOLUME_MIN);
+   double dblLotsMaximum  = SymbolInfoDouble(pSymbol, SYMBOL_VOLUME_MAX);
+   double dblLotsStep     = SymbolInfoDouble(pSymbol, SYMBOL_VOLUME_STEP);
+
+   if(dblLotsMinimum == 0 || dblLotsMaximum == 0 || dblLotsStep == 0)
+     {
+      Print(__FUNCTION__, ": error, cannot retrieve volume info for " + pSymbol);
+      return (0);
+     }
+     
+   // Variables for Geometric Progression
+   //double dblGeoRatio = 2.8,dblGeoInit  = dblLotsMinimum;
+      
+   // Calculate Next Geometric Element
+   //double dblGeoNext  = dblGeoInit * pow( dblGeoRatio, intOrderCount + 1 ); 
+    
+   double dblLotsNext = fmin( dblLotsMaximum,                                     // Prevent too greater volume
+                        fmax( dblLotsMinimum,                                   // Prevent too smaller volume
+                        round( dblGeoNext / dblLotsStep ) * dblLotsStep ) );  // Align to Step value
+
+   return (dblLotsNext);
   }
