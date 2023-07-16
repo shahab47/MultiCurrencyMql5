@@ -246,9 +246,9 @@
       
       
   
-      double TwoPreClose = iClose(CurrentSymbol, Period(), 2);
+      double TwoPreClose = iClose(CurrentSymbol, timeFrameTrigger, 2);
       double TwoPreSt = valueSt[2];
-      double onePreClose = iClose(CurrentSymbol, Period(), 1);
+      double onePreClose = iClose(CurrentSymbol, timeFrameTrigger, 1);
       double onePreSt = valueSt[1];
       
       long digits = SymbolInfoInteger(CurrentSymbol,SYMBOL_DIGITS);
@@ -286,10 +286,7 @@
             
             //Print("TwoPreSt = ",TwoPreSt," TwoPreClose = ",TwoPreClose," onePreSt = ",onePreSt," onePreClose = ",onePreClose);
             return("LONG");
-       }else return("NO_TRADE");
-        
-        
-                  
+       }else return("NO_TRADE");            
    }
    
    void GetSTrendCloseSignalStatus(int SymbolLoop)
@@ -609,7 +606,7 @@
    
    double ZeroPointZeroOneMargin(string symbolGlobal){
    
-         //zPZOM = zero Point Zero One Margin
+         //zPZOM = zero Point Zero One Margin yani 0.01 lot cheghadr margin mikhad ino hesab miokone
          double zPZOM = 0.01;
          double vol =0.01;
          double contractSize = SymbolInfoDouble(symbolGlobal,SYMBOL_TRADE_CONTRACT_SIZE);
@@ -617,7 +614,7 @@
          long leverage= AccountInfoInteger(ACCOUNT_LEVERAGE);
          double initial_margin_rate=0;
          double maintenance_margin_rate =0;
-         bool  ch = SymbolInfoMarginRate(_Symbol,ORDER_TYPE_BUY,initial_margin_rate,maintenance_margin_rate);
+         bool  ch = SymbolInfoMarginRate(symbolGlobal,ORDER_TYPE_BUY,initial_margin_rate,maintenance_margin_rate);
          int calc_mode=(int)SymbolInfoInteger(symbolGlobal,SYMBOL_TRADE_CALC_MODE);
          string str_calc_mode;
          switch(calc_mode)
